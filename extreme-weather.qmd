@@ -1,0 +1,8 @@
+---
+title: Identifying the Impacts of Extreme Weather
+author: Oliver Witt
+date: 11/19/2026
+execute:
+  warning: false
+---
+
