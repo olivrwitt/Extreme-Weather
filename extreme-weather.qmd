@@ -6,34 +6,162 @@ execute:
   warning: false
 ---
 
+## Setup
+```{r}
+# Load the packages we might need
+library(tidyverse)
+library(sf)
+library(dplyr)
+library(terra) 
+library(tmap)
+library(kableExtra)
+library(spData)
+library(spDataLarge)
+library(geodata)
+library(here)
+```
+
+```{r}
+# Load the data
+
+# VIIRS data (rasters)
+h08v05_07 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021038.h08v05.001.2021039064328.tif"))
+h08v06_07 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021038.h08v06.001.2021039064329.tif"))
+h08v05_16 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021047.h08v05.001.2021048091106.tif"))
+h08v06_16 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021047.h08v06.001.2021048091105.tif"))
+
+# OSM buildings (.gpkg)
+buildings <- st_read(here("extreme-weather", "data", "gis_osm_buildings_a_free_1.gpkg"))
+
+# OSM roads (.gpkg)
+roads <- st_read(here("extreme-weather", "data", "gis_osm_roads_free_1.gpkg"))
+```
+
+
 ## Data Merging
-As mentioned above, Houston lies on the border of two tiles. You will need to combine these two tiles together to get one raster for each date (2021-02-07 and 2021-02-16). You can merge rasters using the method discussed in Lab 4, or, if you plan to use the stars package, you can combine them using st_mosaic.
+```{r}
+# Merge the Houston tiles
+
+# First, we need to ensure they all have the same CRS
+crs(h08v05_07) == crs(h08v06_07)
+crs(h08v06_07) == crs(h08v05_16)
+crs(h08v05_16) == crs(h08v06_16)
+# All rasters have the same CRS
+```
+```{r}
+# Now we can merge
+houston_07 = merge(h08v05_07, h08v06_07)
+houston_16 = merge(h08v05_16, h08v06_16)
+```
 
 ## Create blackout mask
-To identify places that experienced a blackout, you should create a “mask” that indicates for each cell whether or not it experienced a blackout.
 
-find the change in night lights intensity (presumably) caused by the storm
-hint: this will require creating a raster object for each day (2021-02-07 and 2021-02-16)
-reclassify the difference raster, assuming that any location that experienced a drop of more than 200 nW cm-2sr-1 experienced a blackout
-assign NA to all locations that experienced a drop of less than 200 nW cm-2sr-1 change
-vectorize the blackout mask
-hint: use st_as_sf() to convert from a raster to a vector and fix any invalid geometries with st_make_valid()
-crop (spatially subset) the blackout mask to the Houston area as defined by the following coordinates:
-(-96.5, 29), (-96.5, 30.5), (-94.5, 30.5), (-94.5, 29)
-re-project the cropped blackout dataset to EPSG:3083 (NAD83 / Texas Centric Albers Equal Area)
+```{r}
+# Reclassify the difference raster
+diff_raster <- houston_07 - houston_16
+
+
+# Create mask
+blackout_mask <- diff_raster
+
+# Assign NA to all locations with a drop of less than 200 nW cm-2sr-1
+blackout_mask[blackout_mask <= 200] <- NA 
+blackout_mask[!is.na(blackout_mask)] <- 1 
+```
+
+```{r}
+# Vectorize the blackout mask and fix geometries
+blackout_vector <- as.polygons(blackout_mask, as_points = FALSE, merge = TRUE) |>
+    st_as_sf() |>
+    st_make_valid()
+```
+
+```{r}
+# Crop the mask to the Houston area
+houston_coords <- rbind(
+  c(-96.5, 29.0),
+  c(-96.5, 30.5),
+  c(-94.5, 30.5),
+  c(-94.5, 29.0),
+  c(-96.5, 29.0)  
+)
+
+houston_bbox <- st_polygon(list(houston_coords)) |> 
+    st_sfc(crs = st_crs(blackout_vector))
+
+# Check that the CRS match
+st_crs(houston_bbox) == st_crs(blackout_vector)
+
+# Crop
+houston_crop <- st_crop(blackout_vector, houston_bbox)
+```
+
+```{r}
+# Re-project the cropped blackout dataset to EPSG:3083 (NAD83 / Texas Centric Albers Equal Area)
+houston_reproj <- st_transform(houston_crop, crs = 3083)
+
+# Confirm that this worked by checking the CRS
+st_crs(houston_reproj)
+```
+
 
 ## Exclude highways from the cropped blackout mask
 Highways may have experienced changes in their night light intensities that are unrelated to the storm. Therefore, you should excluded any locations within 200 meters of all highways in the Houston area.
+```{r}
+# Identify highways from the roads dataset
+highways <- st_read("extreme-weather/data/gis_osm_roads_free_1.gpkg", query = "SELECT * FROM gis_osm_roads_free_1 WHERE fclass='motorway'")
 
-identify areas within 200m of all highways
-hint: you may need to use st_union
-find areas that experienced blackouts that are further than 200m from a highway
-Tip
-The roads geopackage includes data on roads other than highways. However, we can avoid reading in data we don’t need by taking advantage of st_read’s ability to subset using a SQL query.
+# Project the highways data to the same CRS as the blackout vector
+highways_proj <- st_transform(highways, st_crs(houston_reproj))
 
-Below is a SQL query that can be used as an argument in st_read:
+# Create buffer to filter out locations within 200m of a highway
+highway_buffer <- highways_proj |>
+  st_union() |>
+  st_buffer(dist = 200) |>
+  st_make_valid()
 
-"SELECT * FROM gis_osm_roads_free_1 WHERE fclass='motorway'"
+# Filter out locations within 200m of a highway
+blackouts_filter <- st_difference(houston_reproj, highway_buffer) |> 
+    st_make_valid()
+```
+
 
 ## Identify the number of homes likely impacted by blackouts
-identify homes that overlap with areas that experienced blackouts
+
+```{r}
+# Identify homes from the buildings dataset
+homes <- st_read("extreme-weather/data/gis_osm_buildings_a_free_1.gpkg", query = "SELECT *
+FROM gis_osm_buildings_a_free_1
+WHERE (type IS NULL AND name IS NULL)
+OR type in ('residential', 'apartments', 'house', 'static_caravan', 'detached')")
+
+# Project the homes data to the same CRS as the blackout vector and highways data
+homes_proj <- st_transform(homes, st_crs(houston_reproj))
+
+# Identify homes that overlap with areas that experienced blackouts
+blackout_homes <- st_intersection(homes_proj, blackouts_filter)
+```
+
+```{r}
+# Count how many homes experienced blackouts
+n_homes_blackout <- nrow(blackout_homes)
+
+# What percentage of total homes was that?
+n_homes <- nrow(homes)
+percent_blackout <- n_homes_blackout / n_homes
+print(percent_blackout)
+
+# 33% of homes in the Houston area experienced a blackout during this time period
+```
+
+MAKE SURE IT FITS THE RUBRIC
+
+    ADD MARKDOWN AND COMMENTS
+
+    ADD PLOTS AND MAPS THROUGHOUT
+
+            AND INTERPRETATION
+
+    ADD DATA CITATIONS AT THE BOTTOM
+
+    ADD WARNING AND ERROR MESSAGE
