@@ -39,20 +39,41 @@ roads <- st_read(here("extreme-weather", "data", "gis_osm_roads_free_1.gpkg"))
 
 
 ## Data Merging
+First, check the CRS of the data.
 ```{r}
-# Merge the Houston tiles
-
-# First, we need to ensure they all have the same CRS
+# Need to ensure all data have the same CRS
 crs(h08v05_07) == crs(h08v06_07)
 crs(h08v06_07) == crs(h08v05_16)
 crs(h08v05_16) == crs(h08v06_16)
 # All rasters have the same CRS
 ```
+
+Merge the Houston tiles
 ```{r}
 # Now we can merge
 houston_07 = merge(h08v05_07, h08v06_07)
 houston_16 = merge(h08v05_16, h08v06_16)
 ```
+
+Map light intensities before and after the storms (2021-02-07 and 2021-02-16)
+```{r}
+# Map before the storms (Feb 7)
+map_07 <- tm_shape(houston_07, na.rm = TRUE) +
+    tm_raster(col.scale = tm_scale_intervals(values = "Viridis", breaks = c(0, 1, 5, 10, 25, 50, 100, 250, 500, Inf)), 
+        col.legend = tm_legend(title = "nW cm-2 sr-1")) +
+    tm_title("Houston Lights on Feb 7, 2021")
+
+# Map after the storms (Feb 16)
+map_16 <- tm_shape(houston_16, na.rm = TRUE) +
+    tm_raster(col.scale = tm_scale_intervals(values = "Viridis", breaks = c(0, 1, 5, 10, 25, 50, 100, 250, 500, Inf)), 
+        col.legend = tm_legend(title = "nW cm-2 sr-1")) +
+    tm_title("Houston Lights on Feb 16, 2021")
+
+# Display the maps side-by-side
+tmap_arrange(map_07, map_16)
+```
+
+
 
 ## Create blackout mask
 
@@ -104,6 +125,16 @@ houston_reproj <- st_transform(houston_crop, crs = 3083)
 st_crs(houston_reproj)
 ```
 
+```{r}
+# Plot the area that lost power
+tm_shape(houston_reproj, unit = "mi") +
+    tm_polygons() +
+    tm_basemap("Esri.WorldGrayCanvas") +
+    tm_title("Houston Area Blackouts,\nFebrury 2021") +
+    tm_scalebar(position = tm_pos_in("left", "bottom")) +
+    tm_compass(position = tm_pos_in("left", "top"), size = 0.8)
+
+```
 
 ## Exclude highways from the cropped blackout mask
 Highways may have experienced changes in their night light intensities that are unrelated to the storm. Therefore, you should excluded any locations within 200 meters of all highways in the Houston area.
@@ -143,6 +174,17 @@ blackout_homes <- st_intersection(homes_proj, blackouts_filter)
 ```
 
 ```{r}
+# Plot the homes that lost power
+tm_shape(blackout_homes, unit = "mi") +
+    tm_polygons() +
+    tm_basemap("Esri.WorldGrayCanvas") +
+    tm_title("Houston Area Homes That\nLost Power, Februry 2021") +
+    tm_scalebar(position = tm_pos_in("left", "bottom")) +
+    tm_compass(position = tm_pos_in("left", "top"), size = 0.8)
+
+```
+
+```{r}
 # Count how many homes experienced blackouts
 n_homes_blackout <- nrow(blackout_homes)
 
@@ -150,17 +192,24 @@ n_homes_blackout <- nrow(blackout_homes)
 n_homes <- nrow(homes)
 percent_blackout <- n_homes_blackout / n_homes
 print(percent_blackout)
-
-# 33% of homes in the Houston area experienced a blackout during this time period
+print(n_homes_blackout)
 ```
+
+157,408 homes in the Houston area experienced a blackout during this time period.  This is 33% of total homes in the Houston area.
+
+
+## Results and Discussion
+a brief reflection (approx. 100 words) summarizing your results and discussing any limitations to this study
+
+Based on the initial maps (comparing lights on Feb 7 and Feb 16, before and after the first two storms); the post-storm image actually appears _brighter_, which is unexpected.  However, assessing the intersection of the blackout mask with the homes dataset clearly shows that 33% of homes in the area lost power.  Therefore, this deceptive increase in brightness is likely due to reflectance off of post-storm snow/ice, or clouds blocking radiance from the pre-storm image rather than actual on-ground differences in light output.
+
+
+
+
 
 MAKE SURE IT FITS THE RUBRIC
 
     ADD MARKDOWN AND COMMENTS
-
-    ADD PLOTS AND MAPS THROUGHOUT
-
-            AND INTERPRETATION
 
     ADD DATA CITATIONS AT THE BOTTOM
 
