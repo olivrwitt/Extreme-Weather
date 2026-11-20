@@ -8,8 +8,8 @@ All code, comments, and outputs are in "extreme_weather.qmd".
 The "data" folder contains all necessary data including remote sensing (satellite) imagery, 
 The `ACS_2019_5YR_TRACT_48_TEXAS.gdb` folder contains 
 The `VNP46A1` folder contains remote sensing data from NASA, covering the Houston area on 2021-02-07 and 2021-02-16 (before and after the storm).
-The file `gis_osm_buildings_a_free_1.gpkg` contains houses in the Houston area.
-The file `gis_osm_roads_free_1.gpkg` displays the locations of Houston area highways.
+The file `gis_osm_buildings_a_free_1.gpkg` contains the locations of buildings (including type) in the Houston area.
+The file `gis_osm_roads_free_1.gpkg` displays the locations of Houston area roads (including type).
 
 ### Repository Structure
 ```{bash}
@@ -42,10 +42,10 @@ Original assignment by Ruth Oliver and Annie Adams
 ### References/Acknowledgements
 This assingment was produced for a UCSB MEDS course taught by Annie Adams.  The original assignment was written by Ruth Oliver.
 
-OpenStreetMap:
+OpenStreetMap (building and road data):
 OpenStreetMap. (n.d.). Planet OSM. https://planet.openstreetmap.org/ 
 
-VIIRS Data:
+VIIRS Data (satellite imagery):
 NASA. (n.d.). LAADS DAAC. NASA. https://ladsweb.modaps.eosdis.nasa.gov/ 
 
 
