@@ -7,10 +7,11 @@ execute:
 ---
 
 ## Setup
+Load the data we will need for this project.
 ```{r}
 # Load the packages we might need
 library(tidyverse)
-library(sf)
+library(sf) 
 library(dplyr)
 library(terra) 
 library(tmap)
@@ -25,26 +26,38 @@ library(here)
 # Load the data
 
 # VIIRS data (rasters)
-h08v05_07 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021038.h08v05.001.2021039064328.tif"))
-h08v06_07 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021038.h08v06.001.2021039064329.tif"))
-h08v05_16 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021047.h08v05.001.2021048091106.tif"))
-h08v06_16 <- terra::rast(here("extreme-weather", "data", "VNP46A1/VNP46A1.A2021047.h08v06.001.2021048091105.tif"))
+h08v05_07 <- terra::rast("data/VNP46A1/VNP46A1.A2021038.h08v05.001.2021039064328.tif")
+h08v06_07 <- terra::rast("data/VNP46A1/VNP46A1.A2021038.h08v06.001.2021039064329.tif")
+h08v05_16 <- terra::rast("data/VNP46A1/VNP46A1.A2021047.h08v05.001.2021048091106.tif")
+h08v06_16 <- terra::rast("data/VNP46A1/VNP46A1.A2021047.h08v06.001.2021048091105.tif")
 
 # OSM buildings (.gpkg)
-buildings <- st_read(here("extreme-weather", "data", "gis_osm_buildings_a_free_1.gpkg"))
+buildings <- st_read("data/gis_osm_buildings_a_free_1.gpkg")
 
 # OSM roads (.gpkg)
-roads <- st_read(here("extreme-weather", "data", "gis_osm_roads_free_1.gpkg"))
+roads <- st_read("data/gis_osm_roads_free_1.gpkg")
 ```
 
 
 ## Data Merging
+Houston lies on the border of two VIIRS tiles, so we will need to combine these tiles together to get one raster for each date .
+
 First, check the CRS of the data.
 ```{r}
 # Need to ensure all data have the same CRS
 crs(h08v05_07) == crs(h08v06_07)
 crs(h08v06_07) == crs(h08v05_16)
 crs(h08v05_16) == crs(h08v06_16)
+
+if (crs(h08v05_07) != crs(h08v06_07)) {
+  warning("Feb 7 CRS do not match")
+}
+if (crs(h08v06_07) != crs(h08v05_16)) {
+  warning("The dates have different CRS")
+}
+if (crs(h08v05_16) != crs(h08v06_16)) {
+  warning("Feb 16 CRS do not match")
+}
 # All rasters have the same CRS
 ```
 
@@ -57,17 +70,32 @@ houston_16 = merge(h08v05_16, h08v06_16)
 
 Map light intensities before and after the storms (2021-02-07 and 2021-02-16)
 ```{r}
+# Will need to crop to the Houston area first
+houston_ext <- terra::ext(-96.5, -94.5, 29, 30.5)
+nl_07 <- terra::crop(houston_07, houston_ext)
+nl_16 <- terra::crop(houston_16, houston_ext)
+
 # Map before the storms (Feb 7)
-map_07 <- tm_shape(houston_07, na.rm = TRUE) +
-    tm_raster(col.scale = tm_scale_intervals(values = "Viridis", breaks = c(0, 1, 5, 10, 25, 50, 100, 250, 500, Inf)), 
-        col.legend = tm_legend(title = "nW cm-2 sr-1")) +
-    tm_title("Houston Lights on Feb 7, 2021")
+map_07 <- tm_shape(nl_07, na.rm = TRUE) +
+    tm_raster(col.scale = tm_scale_intervals(values = "brewer.greys", breaks = c(0, 1, 5, 10, 25, 50, 100, 250, 500, Inf)), 
+        col.legend = tm_legend(title = "Light Intensity\n(nW cm-2 sr-1)")) +
+    tm_title("Houston Lights on Feb 7, 2021")  +
+    tm_layout(frame = FALSE, inner.margins = 0)  +
+    tm_scalebar(position = tm_pos_in(pos.h = 0.35, pos.v = 0.05,
+          align.h = "right", align.v = "bottom"),  width = 15, text.size = 0.6) +
+    tm_compass(position = tm_pos_in(pos.h = 0.25, pos.v = 0.95,
+          align.h = "right", align.v = "bottom"), size = 0.6)
 
 # Map after the storms (Feb 16)
-map_16 <- tm_shape(houston_16, na.rm = TRUE) +
-    tm_raster(col.scale = tm_scale_intervals(values = "Viridis", breaks = c(0, 1, 5, 10, 25, 50, 100, 250, 500, Inf)), 
-        col.legend = tm_legend(title = "nW cm-2 sr-1")) +
-    tm_title("Houston Lights on Feb 16, 2021")
+map_16 <- tm_shape(nl_16, na.rm = TRUE) +
+    tm_raster(col.scale = tm_scale_intervals(values = "brewer.greys", breaks = c(0, 1, 5, 10, 25, 50, 100, 250, 500, Inf)), 
+        col.legend = tm_legend(title = "Light Intensity\n(nW cm-2 sr-1)")) +
+    tm_title("Houston Lights on Feb 16, 2021") +
+    tm_layout(frame = FALSE, inner.margins = 0)  +
+     tm_scalebar(position = tm_pos_in(pos.h = 0.35, pos.v = 0.05,
+          align.h = "right", align.v = "bottom"),  width = 15, text.size = 0.6) +
+    tm_compass(position = tm_pos_in(pos.h = 0.25, pos.v = 0.95,
+          align.h = "right", align.v = "bottom"), size = 0.6)
 
 # Display the maps side-by-side
 tmap_arrange(map_07, map_16)
@@ -75,12 +103,11 @@ tmap_arrange(map_07, map_16)
 
 
 
-## Create blackout mask
-
+## Create blackout mask for reclassified difference
+Indicates for each cell whether or not it experienced a blackout.
 ```{r}
 # Reclassify the difference raster
 diff_raster <- houston_07 - houston_16
-
 
 # Create mask
 blackout_mask <- diff_raster
@@ -99,19 +126,21 @@ blackout_vector <- as.polygons(blackout_mask, as_points = FALSE, merge = TRUE) |
 
 ```{r}
 # Crop the mask to the Houston area
+# First create bounding box of Houston coordinates
 houston_coords <- rbind(
   c(-96.5, 29.0),
   c(-96.5, 30.5),
   c(-94.5, 30.5),
   c(-94.5, 29.0),
-  c(-96.5, 29.0)  
+  c(-96.5, 29.0)
 )
-
 houston_bbox <- st_polygon(list(houston_coords)) |> 
     st_sfc(crs = st_crs(blackout_vector))
 
 # Check that the CRS match
-st_crs(houston_bbox) == st_crs(blackout_vector)
+if (st_crs(houston_bbox) != st_crs(blackout_vector)) {
+  warning("CRS do not match")
+}
 
 # Crop
 houston_crop <- st_crop(blackout_vector, houston_bbox)
@@ -123,6 +152,9 @@ houston_reproj <- st_transform(houston_crop, crs = 3083)
 
 # Confirm that this worked by checking the CRS
 st_crs(houston_reproj)
+if (st_crs(houston_reproj) != 3083) {
+  warning("Wrong CRS")
+}
 ```
 
 ```{r}
@@ -133,14 +165,15 @@ tm_shape(houston_reproj, unit = "mi") +
     tm_title("Houston Area Blackouts,\nFebrury 2021") +
     tm_scalebar(position = tm_pos_in("left", "bottom")) +
     tm_compass(position = tm_pos_in("left", "top"), size = 0.8)
-
 ```
 
+
+
 ## Exclude highways from the cropped blackout mask
-Highways may have experienced changes in their night light intensities that are unrelated to the storm. Therefore, you should excluded any locations within 200 meters of all highways in the Houston area.
+Highways may have experienced changes in their night light intensities that are unrelated to the storm, so we want to exclude highways from our calculations.
 ```{r}
 # Identify highways from the roads dataset
-highways <- st_read("extreme-weather/data/gis_osm_roads_free_1.gpkg", query = "SELECT * FROM gis_osm_roads_free_1 WHERE fclass='motorway'")
+highways <- st_read("data/gis_osm_roads_free_1.gpkg", query = "SELECT * FROM gis_osm_roads_free_1 WHERE fclass='motorway'")
 
 # Project the highways data to the same CRS as the blackout vector
 highways_proj <- st_transform(highways, st_crs(houston_reproj))
@@ -161,7 +194,7 @@ blackouts_filter <- st_difference(houston_reproj, highway_buffer) |>
 
 ```{r}
 # Identify homes from the buildings dataset
-homes <- st_read("extreme-weather/data/gis_osm_buildings_a_free_1.gpkg", query = "SELECT *
+homes <- st_read("data/gis_osm_buildings_a_free_1.gpkg", query = "SELECT *
 FROM gis_osm_buildings_a_free_1
 WHERE (type IS NULL AND name IS NULL)
 OR type in ('residential', 'apartments', 'house', 'static_caravan', 'detached')")
@@ -199,18 +232,8 @@ print(n_homes_blackout)
 
 
 ## Results and Discussion
-a brief reflection (approx. 100 words) summarizing your results and discussing any limitations to this study
 
-Based on the initial maps (comparing lights on Feb 7 and Feb 16, before and after the first two storms); the post-storm image actually appears _brighter_, which is unexpected.  However, assessing the intersection of the blackout mask with the homes dataset clearly shows that 33% of homes in the area lost power.  Therefore, this deceptive increase in brightness is likely due to reflectance off of post-storm snow/ice, or clouds blocking radiance from the pre-storm image rather than actual on-ground differences in light output.
+Based on the initial maps (comparing lights on Feb 7 and Feb 16, before and after the first two storms); the post-storm image  appears noticeably dimmer than the pre-storm image.  Far less of Houston is covered by lights >500 nW cm-2 sr-1 when compared to the pre-storm coverage.  This pattern holds true when assessing the intersection of the blackout mask with the homes dataset, which shows that 33% of homes in the area (157,408 homes total) lost power. 
+Based on these results, it appears that Houston was affected by significant blackouts following the February 2021 storms. 
 
-
-
-
-
-MAKE SURE IT FITS THE RUBRIC
-
-    ADD MARKDOWN AND COMMENTS
-
-    ADD DATA CITATIONS AT THE BOTTOM
-
-    ADD WARNING AND ERROR MESSAGE
+Using VIIRS (satellite imagery) and OpenStreetMap (ground features) data is an effective way to assess the storm impacts.  However, it comes with some limitations.  First, clouds as well as snow and ice can alter surface reflectance, making areas brighter where actual light intensity has not increased.  Secondly, we are relying on one single image for each date, which can miss the impact of rolling blackouts or blackouts that are resolved more quickly.

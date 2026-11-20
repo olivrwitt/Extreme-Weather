@@ -3,3 +3,5 @@ Extreme-Weather/data/ACS_2019_5YR_TRACT_48_TEXAS.gdb/
 Extreme-Weather/data/VNP46A1/
 Extreme-Weather/data/gis_osm_buildings_a_free_1.gpkg
 Extreme-Weather/data/gis_osm_roads_free_1.gpkg
+/.quarto/
+**/*.quarto_ipynb
